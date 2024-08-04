@@ -9,8 +9,8 @@ max_vertical_ang = 10;              % Maximum vertical angle in radians
 min_dist = 0;                       % Minimum distance
 max_dist = 10;                      % Maximum distance
 ground_threshold = -0.1;            % Threshold for removing ground reflections (in meters)
-plot_type = "filtered";                 % 'live' or 'filtered' or 'both' or 'none' (plotting the raw point cloud or the filtered point cloud or none)
-data = "live";                      % 'live' or 'recorded'
+plot_type = "none";                 % 'live' or 'filtered' or 'both' or 'none' (plotting the raw point cloud or the filtered point cloud or none)
+data = "recorded";                      % 'live' or 'recorded'
 epsilon = 0.4;                      % DBSCAN epsilon parameter
 minPts = 50;                        % DBSCAN minimum points parameter
 

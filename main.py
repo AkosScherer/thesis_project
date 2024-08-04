@@ -1,5 +1,3 @@
-# main.py
-
 import numpy as np
 import threading
 import queue
@@ -13,20 +11,15 @@ from plotting import plot
 
 # Initialize the grid map
 grid_size = 0.1  # 10 cm grid size
-map_width = 200.0  # meters
-map_height = 200.0  # meters
+map_width = 500.0  # meters
+map_height = 500.0  # meters
 
 # Number of grid cells
 num_cols = int(map_width / grid_size)
 num_rows = int(map_height / grid_size)
 
-# Initialize the occupancy grid map with object dtype
-occupancy_map = np.empty((num_rows, num_cols), dtype=object)
-
-# Fill the grid with lists [1, ""]
-for i in range(num_rows):
-    for j in range(num_cols):
-        occupancy_map[i, j] = [1, ""]
+# Initialize the occupancy grid map
+occupancy_map = np.ones((num_rows, num_cols))
 
 # Initialize threads for simultaneous RT and LiDAR data processing 
 def RT_processor_thread(ip, port, target_xy, RT_queue):
@@ -98,14 +91,14 @@ def main():
                 LiDAR_data_flow = False
             
             if LiDAR_data_flow or RT_data_flow:
-                # Recalculating the coordinatas to the gridmap's coordinate system
+                # Recalculating the coordinates to the gridmap's coordinate system
                 polygons, vehicle_polygon = detection_adjustment(LiDAR_data_flow, RT_data_flow, LiDAR_data, veh_xy, heading, initial_heading)
                 # Updating the occupancy grid map with the detections, position
-                occupancy_map = update_grid(LiDAR_data_flow, RT_data_flow, occupancy_map, polygons, grid_size, num_rows, num_cols, veh_xy, vehicle_polygon, target_xy)
+                occupancy_map, submatrix = update_grid(LiDAR_data_flow, RT_data_flow, occupancy_map, polygons, grid_size, num_rows, num_cols, veh_xy, vehicle_polygon, target_xy)
                 
                 # Updating the plot
                 if plot_enabled and continuous_plot:
-                    plot(occupancy_map)
+                    plot(occupancy_map, submatrix, veh_xy, grid_size, map_width, map_height, RT_data_flow, mode='submatrix')
             
             # Printing out the given values    
             if print_data:
@@ -130,15 +123,12 @@ def main():
     except KeyboardInterrupt:
         # Making plot to remain open after exiting the code
         print("\nProgram exited by user.")
-        if plot_enabled and continuous_plot:
+        if plot_enabled:
+            # Keep the submatrix plot open
             plt.ioff()
-            plt.show()
-        # Making sure the updated occupancy grid map is plotted once after exiting the code
-        elif plot_enabled and not continuous_plot:
-            plot(occupancy_map)
-            plt.ioff()
+            # Create a new figure for the full map
+            plot(occupancy_map, submatrix, veh_xy, grid_size, map_width, map_height, RT_data_flow, mode='full')
             plt.show()
         
 if __name__ == "__main__":
     main()
-
