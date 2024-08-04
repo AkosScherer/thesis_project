@@ -11,8 +11,10 @@ from plotting import plot
 
 # Initialize the grid map
 grid_size = 0.1  # 10 cm grid size
-map_width = 500.0  # meters
-map_height = 500.0  # meters
+map_width = 100.0  # meters
+map_height = 200.0  # meters
+
+submatrix_size = 70 # meters
 
 # Number of grid cells
 num_cols = int(map_width / grid_size)
@@ -34,7 +36,8 @@ def main():
     plot_enabled = True
     continuous_plot = True
     print_data = True
-    target_xy = [10, 10]
+    path_planning = True
+    target_xy = [15, 30]
     
     # RT connection data
     ip_address = '0.0.0.0'
@@ -94,7 +97,7 @@ def main():
                 # Recalculating the coordinates to the gridmap's coordinate system
                 polygons, vehicle_polygon = detection_adjustment(LiDAR_data_flow, RT_data_flow, LiDAR_data, veh_xy, heading, initial_heading)
                 # Updating the occupancy grid map with the detections, position
-                occupancy_map, submatrix = update_grid(LiDAR_data_flow, RT_data_flow, occupancy_map, polygons, grid_size, num_rows, num_cols, veh_xy, vehicle_polygon, target_xy)
+                occupancy_map, submatrix = update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy)
                 
                 # Updating the plot
                 if plot_enabled and continuous_plot:

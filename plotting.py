@@ -4,8 +4,8 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 
 # Create a custom colormap
-cmap = mcolors.ListedColormap(['gray', 'white', 'green', 'black', 'yellow', 'orange','red'])
-bounds = [-2.5, -1.5, -0.5, 0.5, 25, 62.5, 87.5, 125]
+cmap = mcolors.ListedColormap(['blue', 'gray', 'white', 'green', 'black', 'yellow', 'orange','red'])
+bounds = [-3.5, -2.5, -1.5, -0.5, 0.5, 25, 62.5, 87.5, 125]
 norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
 # Setup plot for dynamic updates
