@@ -1,11 +1,10 @@
 import numpy as np
 import cv2
 from collections import deque
+import math
 
 first_iteration = True
-iterations = 0
-
-from collections import deque
+last_object_cnt = -1
 
 def bfs_search(occupancy_map, start, goal):
     rows, cols = occupancy_map.shape
@@ -40,11 +39,26 @@ def bfs_search(occupancy_map, start, goal):
     
     return []
 
+def smooth_path_moving_average(path, window_size=3):
+    if len(path) < 3:
+        return path
 
+    smoothed_path = []
+    for i in range(len(path)):
+        avg_x = 0
+        avg_y = 0
+        count = 0
+        for j in range(max(0, i - window_size), min(len(path), i + window_size + 1)):
+            avg_x += path[j][0]
+            avg_y += path[j][1]
+            count += 1
+        smoothed_path.append((int(round(avg_x / count)), int(round(avg_y / count))))
+    
+    return smoothed_path
 
-def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy):
+def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading):
     global first_iteration
-    global iterations
+    global last_object_cnt
 
     trajectory_col = int(veh_xy[0] / grid_size + num_cols / 2) if RT_data_flow else int(num_cols / 2)
     trajectory_row = int(veh_xy[1] / grid_size) if RT_data_flow else 0
@@ -53,7 +67,7 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
         target_col = int(target_xy[0] / grid_size + num_cols / 2)
         target_row = int(target_xy[1] / grid_size)
         
-        radius = 25
+        radius = 10
         y_grid, x_grid = np.ogrid[:occupancy_map.shape[0], :occupancy_map.shape[1]]
         distance_from_center = np.sqrt((x_grid - target_col) ** 2 + (y_grid - target_row) ** 2)
         target_mask = distance_from_center <= radius
@@ -61,10 +75,11 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
         occupancy_map[target_mask] = 0
         first_iteration = False
 
-    submatrix_col_start = int(max(0, trajectory_col - submatrix_size // (2 * grid_size)))
-    submatrix_col_end = int(min(num_cols, submatrix_col_start + submatrix_size // grid_size))
-    submatrix_row_start = int(max(0, trajectory_row + 1 - submatrix_size // (5 * grid_size)))
-    submatrix_row_end = int(min(num_rows, trajectory_row + 1 + 4 * submatrix_size // (5 * grid_size)))
+    # Define the submatrix boundaries
+    submatrix_col_start = int(max(0, trajectory_col - (submatrix_size / grid_size / 2)))
+    submatrix_col_end = int(min(num_cols, submatrix_col_start + (submatrix_size / grid_size)))
+    submatrix_row_start = int(max(0, trajectory_row + 1 - (submatrix_size / grid_size * 0.20)))
+    submatrix_row_end = int(min(num_rows, trajectory_row + 1 + (submatrix_size / grid_size * 0.80)))
 
     submatrix = np.copy(occupancy_map[submatrix_row_start:submatrix_row_end, submatrix_col_start:submatrix_col_end])
     
@@ -127,21 +142,25 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
 
     occupancy_map[submatrix_row_start:submatrix_row_end, submatrix_col_start:submatrix_col_end] = submatrix
 
-    if path_planning:
+    object = (occupancy_map > 1)
+    object_cnt = np.sum(object)
+
+    if path_planning and object_cnt > last_object_cnt:
         occupancy_map[occupancy_map == -3] = 1
 
         target_col = int(target_xy[0] / grid_size + num_cols / 2)
         target_row = int(target_xy[1] / grid_size)
 
-        start = (trajectory_row + 18, trajectory_col)
+        start = (trajectory_row+10, trajectory_col)
         goal = (target_row, target_col)
         path = bfs_search(occupancy_map, start, goal)
+        smoothed_path = smooth_path_moving_average(path, window_size=25)
 
-        for (r, c) in path:
+        for (r, c) in smoothed_path:
             if occupancy_map[r, c] != 0:
                 occupancy_map[r, c] = -3
-        iterations = 0
-    iterations += 1
+                
+        last_object_cnt = object_cnt
 
     return occupancy_map, submatrix
 

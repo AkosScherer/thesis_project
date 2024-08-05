@@ -10,7 +10,7 @@ from occupancy_map import update_grid
 from plotting import plot
 
 # Initialize the grid map
-grid_size = 0.1  # 10 cm grid size
+grid_size = 0.25  # 10 cm grid size
 map_width = 100.0  # meters
 map_height = 200.0  # meters
 
@@ -35,9 +35,9 @@ def main():
     # Customizable variables
     plot_enabled = True
     continuous_plot = True
-    print_data = True
+    print_data = False
     path_planning = True
-    target_xy = [15, 30]
+    target_xy = [0, 30]
     
     # RT connection data
     ip_address = '0.0.0.0'
@@ -49,8 +49,7 @@ def main():
     veh_xy = [None, None]
     RT_data = None
     LiDAR_data = None
-    heading = None
-    initial_heading = None
+    map_heading = None
     polygons = None
     vehicle_polygon = None
     global occupancy_map
@@ -77,7 +76,7 @@ def main():
                 while not RT_queue.empty():
                     RT_data = RT_queue.get()
                 if RT_data:
-                    lat_lon, heading, initial_heading, timestamp, distance, veh_xy = RT_data
+                    lat_lon, map_heading, timestamp, distance, veh_xy = RT_data
                     RT_data_flow = True
             else:
                 RT_data_flow = False
@@ -95,9 +94,9 @@ def main():
             
             if LiDAR_data_flow or RT_data_flow:
                 # Recalculating the coordinates to the gridmap's coordinate system
-                polygons, vehicle_polygon = detection_adjustment(LiDAR_data_flow, RT_data_flow, LiDAR_data, veh_xy, heading, initial_heading)
+                polygons, vehicle_polygon = detection_adjustment(LiDAR_data_flow, RT_data_flow, LiDAR_data, veh_xy, map_heading)
                 # Updating the occupancy grid map with the detections, position
-                occupancy_map, submatrix = update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy)
+                occupancy_map, submatrix = update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading)
                 
                 # Updating the plot
                 if plot_enabled and continuous_plot:

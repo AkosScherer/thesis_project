@@ -90,7 +90,10 @@ def process_RT_data(ip, port, target_xy):
 
                         # Calculate distance to target point
                         distance = calculate_distance(x_rot, y_rot, target_xy[0], target_xy[1])
-                        yield lat_lon, heading_deg, initial_heading, timestamp, distance, veh_xy
+                        
+                        map_heading= heading_deg - initial_heading
+                        
+                        yield lat_lon, map_heading, timestamp, distance, veh_xy
 
             except socket.timeout:
                 timeout = True
