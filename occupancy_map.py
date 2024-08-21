@@ -1,10 +1,14 @@
+# occupancy_map.py
+
 import numpy as np
 import cv2
 from collections import deque
-import math
+from scipy.interpolate import splprep, splev
 
 first_iteration = True
 last_object_cnt = -1
+
+
 
 def bfs_search(occupancy_map, start, goal):
     rows, cols = occupancy_map.shape
@@ -39,22 +43,25 @@ def bfs_search(occupancy_map, start, goal):
     
     return []
 
-def smooth_path_moving_average(path, window_size=3):
+def smooth_path(path, window_size=25):
     if len(path) < 3:
         return path
-
+    
+    path = np.array(path)
     smoothed_path = []
+
     for i in range(len(path)):
-        avg_x = 0
-        avg_y = 0
-        count = 0
-        for j in range(max(0, i - window_size), min(len(path), i + window_size + 1)):
-            avg_x += path[j][0]
-            avg_y += path[j][1]
-            count += 1
-        smoothed_path.append((int(round(avg_x / count)), int(round(avg_y / count))))
+        window_start = max(0, i - window_size)
+        window_end = min(len(path), i + window_size + 1)
+        window = path[window_start:window_end]
+        
+        avg_x = np.mean(window[:, 0])
+        avg_y = np.mean(window[:, 1])
+        
+        smoothed_path.append((int(round(avg_x)), int(round(avg_y))))
     
     return smoothed_path
+
 
 def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading):
     global first_iteration
@@ -62,6 +69,8 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
 
     trajectory_col = int(veh_xy[0] / grid_size + num_cols / 2) if RT_data_flow else int(num_cols / 2)
     trajectory_row = int(veh_xy[1] / grid_size) if RT_data_flow else 0
+    
+    vehicle_pos = [trajectory_row, trajectory_col]
     
     if first_iteration and RT_data_flow:
         target_col = int(target_xy[0] / grid_size + num_cols / 2)
@@ -76,10 +85,10 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
         first_iteration = False
 
     # Define the submatrix boundaries
-    submatrix_col_start = int(max(0, trajectory_col - (submatrix_size / grid_size / 2)))
+    submatrix_col_start = int(max(0, vehicle_pos[1] - (submatrix_size / grid_size / 2)))
     submatrix_col_end = int(min(num_cols, submatrix_col_start + (submatrix_size / grid_size)))
-    submatrix_row_start = int(max(0, trajectory_row + 1 - (submatrix_size / grid_size * 0.20)))
-    submatrix_row_end = int(min(num_rows, trajectory_row + 1 + (submatrix_size / grid_size * 0.80)))
+    submatrix_row_start = int(max(0, vehicle_pos[0] + 1 - (submatrix_size / grid_size * 0.20)))
+    submatrix_row_end = int(min(num_rows, vehicle_pos[0] + 1 + (submatrix_size / grid_size * 0.80)))
 
     submatrix = np.copy(occupancy_map[submatrix_row_start:submatrix_row_end, submatrix_col_start:submatrix_col_end])
     
@@ -135,8 +144,8 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
         cv2.fillPoly(vehicle_mask_filled, [vehicle_mask_coords], 1)
         submatrix[(vehicle_mask_filled == 1) & (submatrix != -1)] = -2
         
-        submatrix_trajectory_col = trajectory_col - submatrix_col_start
-        submatrix_trajectory_row = trajectory_row - submatrix_row_start
+        submatrix_trajectory_col = vehicle_pos[1] - submatrix_col_start
+        submatrix_trajectory_row = vehicle_pos[0] - submatrix_row_start
         
         submatrix[submatrix_trajectory_row, submatrix_trajectory_col] = -1
 
@@ -145,22 +154,25 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
     object = (occupancy_map > 1)
     object_cnt = np.sum(object)
 
-    if path_planning and object_cnt > last_object_cnt:
+    if path_planning: # and object_cnt > last_object_cnt:
         occupancy_map[occupancy_map == -3] = 1
 
         target_col = int(target_xy[0] / grid_size + num_cols / 2)
         target_row = int(target_xy[1] / grid_size)
 
-        start = (trajectory_row+10, trajectory_col)
+        start = (vehicle_pos[0], vehicle_pos[1])
         goal = (target_row, target_col)
         path = bfs_search(occupancy_map, start, goal)
-        smoothed_path = smooth_path_moving_average(path, window_size=25)
+        smoothed_path = smooth_path(path)
 
         for (r, c) in smoothed_path:
             if occupancy_map[r, c] != 0:
                 occupancy_map[r, c] = -3
                 
         last_object_cnt = object_cnt
+        
+    target_col = int(target_xy[0] / grid_size + num_cols / 2)
+    target_row = int(target_xy[1] / grid_size)
+    target = [target_row, target_col]
 
-    return occupancy_map, submatrix
-
+    return occupancy_map, submatrix, vehicle_pos, smoothed_path, target

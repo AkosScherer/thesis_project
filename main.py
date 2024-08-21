@@ -1,3 +1,5 @@
+# main.py
+
 import numpy as np
 import threading
 import queue
@@ -8,6 +10,7 @@ from LiDAR_processor import receive_bounding_boxes
 from detection_adjustment import detection_adjustment
 from occupancy_map import update_grid
 from plotting import plot
+from control import angle_and_distance
 
 # Initialize the grid map
 grid_size = 0.25  # 10 cm grid size
@@ -38,6 +41,7 @@ def main():
     print_data = False
     path_planning = True
     target_xy = [0, 30]
+    lookahead = 8
     
     # RT connection data
     ip_address = '0.0.0.0'
@@ -53,6 +57,7 @@ def main():
     polygons = None
     vehicle_polygon = None
     global occupancy_map
+    wheelbase = 2.789 # [meter]
 
     # Queues for inter-thread communication
     RT_queue = queue.Queue()
@@ -96,11 +101,13 @@ def main():
                 # Recalculating the coordinates to the gridmap's coordinate system
                 polygons, vehicle_polygon = detection_adjustment(LiDAR_data_flow, RT_data_flow, LiDAR_data, veh_xy, map_heading)
                 # Updating the occupancy grid map with the detections, position
-                occupancy_map, submatrix = update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading)
+                occupancy_map, submatrix, vehicle_pos, smoothed_path, target = update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading)
                 
                 # Updating the plot
                 if plot_enabled and continuous_plot:
                     plot(occupancy_map, submatrix, veh_xy, grid_size, map_width, map_height, RT_data_flow, mode='submatrix')
+                    
+                angle_and_distance(vehicle_pos, smoothed_path, map_heading, target, wheelbase, lookahead)
             
             # Printing out the given values    
             if print_data:
