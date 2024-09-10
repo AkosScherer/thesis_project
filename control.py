@@ -1,30 +1,44 @@
-import math
-import os
+# control.py
 
-def angle_and_distance(vehicle_pos, point_pos, heading_angle_deg, target, wheelbase, lookahead):
-    # Unpack positions
-    x1, y1 = point_pos[-33]
-    x2, y2 = target
+import numpy as np
+
+current_steering_angle = 0
+
+def pure_pursuit(lookahead_distance, wheelbase, current_pos, trajectory, heading_angle):
+    global current_steering_angle
+
+    # Convert the heading angle to radians
+    heading_angle_rad = np.deg2rad(heading_angle)
     
-    # Calculate the angle from the vehicle to the point in degrees
-    angle_to_point_deg = math.degrees(math.atan2(y2 - y1, x2 - x1))
+    # Find the lookahead point on the trajectory
+    lookahead_point = None
+    for point in trajectory:
+        distance = np.linalg.norm(np.array(point) - np.array(current_pos))
+        if distance >= lookahead_distance:
+            lookahead_point = point
+            break
+
+    #if lookahead_point is None:
+        #raise ValueError("No point found within the lookahead distance on the trajectory")
     
-    # Normalize the angle to be in the range [0, 360)
-    angle_to_point_deg = (angle_to_point_deg + 360) % 360
-    heading_angle_deg = (heading_angle_deg + 360) % 360
-    
-    # Calculate the difference between the two angles
-    angle_diff = abs(angle_to_point_deg - heading_angle_deg)
-    
-    # Ensure we have the smallest angle (<= 180 degrees)
-    smaller_angle = min(angle_diff, 360 - angle_diff)
-    
-    # Calculate the distance between the vehicle and the point
-    distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2) * 0.25
-    
-    #os.system('cls' if os.name == 'nt' else 'clear')
-    #print(f"The smaller angle between the vehicle heading and the point is: {smaller_angle:.2f} degrees")
-    #print(f"The distance between the vehicle and the point is: {distance:.2f} meter")
-    
-    steering_angle = math.degrees(math.atan((2 * wheelbase * math.sin(smaller_angle)) / distance))
-    print('steering angle: ', steering_angle, ' distance: ', distance)
+    if lookahead_point != None:
+        # Transform the lookahead point to vehicle coordinates
+        dx = lookahead_point[0] - current_pos[0]
+        dy = lookahead_point[1] - current_pos[1]
+
+        # Rotate the point to the vehicle's coordinate frame
+        local_x = dx * np.cos(heading_angle_rad) + dy * np.sin(heading_angle_rad)
+        local_y = -dx * np.sin(heading_angle_rad) + dy * np.cos(heading_angle_rad)
+
+        # Calculate the steering angle
+        if local_x == 0:
+            return 0.0  # No steering required if the vehicle is directly on the trajectory
+        
+        curvature = 2 * local_y / (lookahead_distance ** 2)
+        steering_angle = np.arctan(curvature * wheelbase)
+        steering_angle = np.rad2deg(steering_angle)
+
+        current_steering_angle = steering_angle
+        return steering_angle
+    else:
+        return current_steering_angle

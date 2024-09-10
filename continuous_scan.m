@@ -2,17 +2,17 @@ clear all
 clc
 
 % Define Filtering Parameters (unchanged)
-min_horizontal_ang = deg2rad(-50);  % Minimum horizontal angle in radians
-max_horizontal_ang = deg2rad(50);   % Maximum horizontal angle in radians
-min_vertical_ang = deg2rad(-10);    % Minimum vertical angle in radians
-max_vertical_ang = 10;              % Maximum vertical angle in radians
-min_dist = 0;                       % Minimum distance
-max_dist = 10;                      % Maximum distance
-ground_threshold = -0.1;            % Threshold for removing ground reflections (in meters)
-plot_type = "none";                 % 'live' or 'filtered' or 'both' or 'none' (plotting the raw point cloud or the filtered point cloud or none)
-data = "recorded";                      % 'live' or 'recorded'
+min_horizontal_ang = deg2rad(-60);  % Minimum horizontal angle in radians
+max_horizontal_ang = deg2rad(60);   % Maximum horizontal angle in radians
+min_vertical_ang = deg2rad(-50);    % Minimum vertical angle in radians
+max_vertical_ang = deg2rad(10);              % Maximum vertical angle in radians
+min_dist = 1.5;                       % Minimum distance
+max_dist = 100;                      % Maximum distance
+ground_threshold = -1;            % Threshold for removing ground reflections (in meters)
+plot_type = "both";                 % 'live' or 'filtered' or 'both' or 'none' (plotting the raw point cloud or the filtered point cloud or none)
+data = "live";                      % 'live' or 'recorded'
 epsilon = 0.4;                      % DBSCAN epsilon parameter
-minPts = 50;                        % DBSCAN minimum points parameter
+minPts = 25;                        % DBSCAN minimum points parameter
 
 % Create a TCP/IP client
 t = tcpclient('localhost', 54320);   % Connect to the Python server
@@ -195,7 +195,9 @@ while true
                 bounding_boxes_str = [bounding_boxes_str, sprintf('%f,%f,%f,%f,%f,%f,%f,%f;', current_frame_boxes{box_idx}(:))];
             end
             % Send bounding box coordinates through the socket in one message
-            write(t, bounding_boxes_str);
+            if ~isempty(bounding_boxes_str)
+                write(t, bounding_boxes_str);
+            end
         end
         
         drawnow limitrate;
@@ -248,7 +250,9 @@ while true
                 bounding_boxes_str = [bounding_boxes_str, sprintf('%f,%f,%f,%f,%f,%f,%f,%f;', current_frame_boxes{box_idx}(:))];
             end
             % Send bounding box coordinates through the socket in one message
-            write(t, bounding_boxes_str);
+            if ~isempty(bounding_boxes_str)
+                write(t, bounding_boxes_str);
+            end
         end
         
         drawnow limitrate;

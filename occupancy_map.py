@@ -1,23 +1,30 @@
 # occupancy_map.py
 
+import heapq
 import numpy as np
 import cv2
 from collections import deque
 from scipy.interpolate import splprep, splev
 
 first_iteration = True
-last_object_cnt = -1
+
+# Manhattan distance heuristic for A*
+def heuristic(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
-
-def bfs_search(occupancy_map, start, goal):
+def a_star_search(occupancy_map, start, goal):
     rows, cols = occupancy_map.shape
-    queue = deque([start])
+    open_set = []
+    heapq.heappush(open_set, (0, start))
     came_from = {start: None}
-    visited = set([start])
+    g_score = {start: 0}
     
-    while queue:
-        current = queue.popleft()
+    def heuristic(a, b):
+        return np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+    while open_set:
+        _, current = heapq.heappop(open_set)
         
         if current == goal:
             path = []
@@ -28,20 +35,34 @@ def bfs_search(occupancy_map, start, goal):
             return path
         
         neighbors = [
-            (current[0] + 1, current[1]),
-            (current[0] - 1, current[1]),
-            (current[0], current[1] + 1),
-            (current[0], current[1] - 1)
+            (current[0] + 1, current[1]),       # down
+            (current[0] - 1, current[1]),       # up
+            (current[0], current[1] + 1),       # right
+            (current[0], current[1] - 1),       # left
+            (current[0] + 1, current[1] + 1),  # down-right
+            (current[0] - 1, current[1] - 1),  # up-left
+            (current[0] + 1, current[1] - 1),  # down-left
+            (current[0] - 1, current[1] + 1)   # up-right
         ]
         
         for neighbor in neighbors:
             if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols:
-                if neighbor not in visited and occupancy_map[neighbor] <= 1:  # Avoid cells with values > 1
-                    visited.add(neighbor)
-                    came_from[neighbor] = current
-                    queue.append(neighbor)
-    
-    return []
+                if occupancy_map[neighbor] <= 1:  # Avoid cells with values > 1
+                    # Diagonal move cost adjustment
+                    if (neighbor[0] != current[0] and neighbor[1] != current[1]):
+                        move_cost = np.sqrt(2)
+                    else:
+                        move_cost = 1
+                    
+                    tentative_g_score = g_score[current] + move_cost
+
+                    if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                        g_score[neighbor] = tentative_g_score
+                        f_score = tentative_g_score + heuristic(neighbor, goal)
+                        heapq.heappush(open_set, (f_score, neighbor))
+                        came_from[neighbor] = current
+
+    return [] 
 
 def smooth_path(path, window_size=25):
     if len(path) < 3:
@@ -61,7 +82,6 @@ def smooth_path(path, window_size=25):
         smoothed_path.append((int(round(avg_x)), int(round(avg_y))))
     
     return smoothed_path
-
 
 def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading):
     global first_iteration
@@ -154,16 +174,39 @@ def update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, pol
     object = (occupancy_map > 1)
     object_cnt = np.sum(object)
 
-    if path_planning: # and object_cnt > last_object_cnt:
+    if path_planning:
         occupancy_map[occupancy_map == -3] = 1
 
         target_col = int(target_xy[0] / grid_size + num_cols / 2)
         target_row = int(target_xy[1] / grid_size)
 
+        heading_rad = np.deg2rad(map_heading)
+
+        # Calculate the point in front of the vehicle
+        front_distance = 5
+        front_x = veh_xy[0] + front_distance * np.sin(heading_rad)
+        front_y = veh_xy[1] + front_distance * np.cos(heading_rad)
+
+        # Calculate the grid position for the starting point
+        trajectory_col = int(front_x / grid_size + num_cols / 2) if RT_data_flow else int(num_cols / 2)
+        trajectory_row = int(front_y / grid_size) if RT_data_flow else 0
+    
+        front_pos = [trajectory_row, trajectory_col]
+
+        # Run A* search from vehicle's position to the point ahead of the vehicle
         start = (vehicle_pos[0], vehicle_pos[1])
+        front_pos = (front_pos[0], front_pos[1])
+        path1 = a_star_search(occupancy_map, start, front_pos)
+
+        # Run A* search from the point ahead of the vehicle to the target point
         goal = (target_row, target_col)
-        path = bfs_search(occupancy_map, start, goal)
-        smoothed_path = smooth_path(path)
+        path2 = a_star_search(occupancy_map, front_pos, goal)
+
+        # Combine paths
+        combined_path = path1[:-1] + path2  # Exclude the overlap point between the two paths
+
+        # Smooth the combined path
+        smoothed_path = smooth_path(combined_path)
 
         for (r, c) in smoothed_path:
             if occupancy_map[r, c] != 0:

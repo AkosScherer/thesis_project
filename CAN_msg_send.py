@@ -1,41 +1,43 @@
+# CAN_msg_send.py
+
 import can
-import math
 import time
 
-control = True
 new_steering_angle = 0
 current_steering_angle = 0
+transmitted_steering_angle = 0
 alive_counter = 0
 
-# Initialize the CAN bus once
+# Initialize the CAN bus
 bus = can.Bus(interface='pcan', channel='PCAN_USBBUS1', bitrate=500)
 
-def steering(new_steering_angle, alive_counter, control):
+def steering(new_steering_angle, steering_angle_tolerance):
     global current_steering_angle
+    
+    new_steering_angle = new_steering_angle * 40
+    new_steering_angle = int(new_steering_angle)
+    if current_steering_angle -2 <= new_steering_angle <= current_steering_angle + 2:
+        new_steering_angle = current_steering_angle
     
     if new_steering_angle > 180:
         new_steering_angle = 180
     elif new_steering_angle < -180:
         new_steering_angle = -180
-        
-    angles = []
-    if current_steering_angle - 2 <= new_steering_angle <= current_steering_angle + 2:
-        angles.append(new_steering_angle)
-    elif new_steering_angle > current_steering_angle + 2:
-        iterations = math.ceil((new_steering_angle  - current_steering_angle) / 2)
-        for i in range(iterations-1):
-            angles.append(current_steering_angle + ((i+1) * 2))
-        angles.append(new_steering_angle)
-    elif new_steering_angle < current_steering_angle - 2:
-        iterations = math.ceil((current_steering_angle  - new_steering_angle) / 2)
-        for i in range(iterations-1):
-            angles.append(current_steering_angle - ((i+1) * 2))
-        angles.append(new_steering_angle)
-        
-    for angle in angles:
-        send_one(angle, control)
     
+    if current_steering_angle - steering_angle_tolerance <= new_steering_angle <= current_steering_angle + steering_angle_tolerance:
+        transmitted_steering_angle = new_steering_angle
+        send_one(transmitted_steering_angle)
+    elif new_steering_angle < current_steering_angle - steering_angle_tolerance:
+        transmitted_steering_angle = current_steering_angle - steering_angle_tolerance
+        send_one(transmitted_steering_angle)
+    elif new_steering_angle > current_steering_angle + steering_angle_tolerance:
+        transmitted_steering_angle = current_steering_angle + steering_angle_tolerance
+        send_one(transmitted_steering_angle)
+    
+    current_steering_angle_to_send = current_steering_angle
     current_steering_angle = new_steering_angle
+    
+    return current_steering_angle_to_send, new_steering_angle, transmitted_steering_angle
 
 def encode_can_data(data_1, data_2, data_3, data_4, data_5, data_6, data_7, data_8, data_9):
     data = (
@@ -51,35 +53,35 @@ def encode_can_data(data_1, data_2, data_3, data_4, data_5, data_6, data_7, data
     )
     return bytearray(data.to_bytes(8, byteorder='little'))
 
-def send_one(steering_angle, control):
+def send_one(steering_angle):
     global alive_counter
     
-    if control:
-        Alive_DFLaDMCOutput01 = alive_counter
-        LaDMC_Status__nu = 1
-        LaDMC_SteerAngReq__deg = int(65535 * ((steering_angle + 800) / 1638.375))
+    #if control:
+    Alive_DFLaDMCOutput01 = alive_counter
+    LaDMC_Status__nu = 1
+    LaDMC_SteerAngReq__deg = int(65535 * (((steering_angle * (-1)) + 800) / 1638.375))
 
-        data = encode_can_data(0, Alive_DFLaDMCOutput01, LaDMC_Status__nu, 0, 0, 0, 0, 0, LaDMC_SteerAngReq__deg)
+    data = encode_can_data(0, Alive_DFLaDMCOutput01, LaDMC_Status__nu, 0, 0, 0, 0, 0, LaDMC_SteerAngReq__deg)
 
-        data[0] = 0x00
-        data[2] = 0x80
-        data[3] = 0x80
-        data[4] = 0xBE
+    data[0] = 0x00
+    data[2] = 0x80
+    data[3] = 0x80
+    data[4] = 0xBE
     
-    else:
-        Alive_DFLaDMCOutput01 = alive_counter
-        LaDMC_Status__nu = 0
-        LaDMC_SteerAngReq__deg = 0
-
-        data = encode_can_data(0, Alive_DFLaDMCOutput01, LaDMC_Status__nu, 0, 0, 0, 0, 0, LaDMC_SteerAngReq__deg)
-
-        data[0] = 0x00
-        data[2] = 0x00
-        data[3] = 0x80
-        data[4] = 0x3E
-        data[5] = 0x00
-        data[6] = 0xF4
-        data[7] = 0x01
+    #else:
+    #    Alive_DFLaDMCOutput01 = alive_counter
+    #    LaDMC_Status__nu = 0
+    #    LaDMC_SteerAngReq__deg = 0
+    #
+    #    data = encode_can_data(0, Alive_DFLaDMCOutput01, LaDMC_Status__nu, 0, 0, 0, 0, 0, LaDMC_SteerAngReq__deg)
+    #
+    #    data[0] = 0x00
+    #    data[2] = 0x00
+    #    data[3] = 0x80
+    #    data[4] = 0x3E
+    #    data[5] = 0x00
+    #    data[6] = 0xF4
+    #    data[7] = 0x01
 
     msg = can.Message(
         arbitration_id=0x74, data=data, is_extended_id=False
@@ -92,25 +94,10 @@ def send_one(steering_angle, control):
 
     try:
         bus.send(msg)
-        print(f"Message sent on {bus.channel_info}")
     except can.CanError:
         print("Message NOT sent")
-
-    print('steering angle:', steering_angle, 'control: ', control)   
+  
     time.sleep(0.1) 
-
-if __name__ == "__main__":
-
-    for i in range(50):
-        if control:
-            steering(new_steering_angle, alive_counter, control)
-        else:
-            send_one(0, control)
-            
-        if new_steering_angle == 0:
-            new_steering_angle = -200
-
-
 
 #BO_ 116 AP_DFLaDMCOutput01: 8 AP
 # SG_ LaDMC_SteerAngReq__deg : 42|16@1+ (0.025,-800) [-800|838.375] "deg"  Gateway

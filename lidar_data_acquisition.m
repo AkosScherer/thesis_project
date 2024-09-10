@@ -44,9 +44,9 @@ lidar = velodynelidar('VLP16', 'Port', 2371);
 start(lidar)
 
 % Define the axis limits
-xLimits = [-20, 20];
-yLimits = [-20, 20];
-zLimits = [-10, 10];
+xLimits = [-150, 150];
+yLimits = [-150, 150];
+zLimits = [-20, 20];
 
 % Initialize the pcplayer with the specified limits
 lidarViewer = pcplayer(xLimits, yLimits, zLimits);

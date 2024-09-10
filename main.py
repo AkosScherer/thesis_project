@@ -10,14 +10,14 @@ from LiDAR_processor import receive_bounding_boxes
 from detection_adjustment import detection_adjustment
 from occupancy_map import update_grid
 from plotting import plot
-from control import angle_and_distance
+from control import pure_pursuit
+from CAN_msg_send import steering
 
 # Initialize the grid map
-grid_size = 0.25  # 10 cm grid size
-map_width = 100.0  # meters
+grid_size = 0.25    # meters
+map_width = 100.0   # meters
 map_height = 200.0  # meters
-
-submatrix_size = 70 # meters
+submatrix_size = 70  # meters
 
 # Number of grid cells
 num_cols = int(map_width / grid_size)
@@ -26,7 +26,9 @@ num_rows = int(map_height / grid_size)
 # Initialize the occupancy grid map
 occupancy_map = np.ones((num_rows, num_cols))
 
-# Initialize threads for simultaneous RT and LiDAR data processing 
+steering_values = []
+
+# Initialize threads for simultaneous RT and LiDAR data processing
 def RT_processor_thread(ip, port, target_xy, RT_queue):
     for data in process_RT_data(ip, port, target_xy):
         RT_queue.put(data)
@@ -34,14 +36,23 @@ def RT_processor_thread(ip, port, target_xy, RT_queue):
 def LiDAR_processor_thread(grid_queue):
     receive_bounding_boxes(grid_queue)
 
+def steering_thread(vehicle_pos, smoothed_path, map_heading, wheelbase, lookahead_distance, steering_angle_tolerance):
+    global steering_values
+    # Calculate the steering angle
+    steering_angle = pure_pursuit(lookahead_distance, wheelbase, vehicle_pos, smoothed_path, map_heading)
+    # Call the steering function
+    steering_values = steering(steering_angle, steering_angle_tolerance)
+
 def main():
     # Customizable variables
     plot_enabled = True
     continuous_plot = True
-    print_data = False
+    print_data = True
     path_planning = True
-    target_xy = [0, 30]
-    lookahead = 8
+    control = True
+    target_xy = [0, 50]             # [m] [X,Y] target position relative to the vehicle
+    lookahead_distance = 24         # [grid cell]
+    steering_angle_tolerance = 5    # [deg]
     
     # RT connection data
     ip_address = '0.0.0.0'
@@ -57,7 +68,7 @@ def main():
     polygons = None
     vehicle_polygon = None
     global occupancy_map
-    wheelbase = 2.789 # [meter]
+    wheelbase = 2.789   # [m]
 
     # Queues for inter-thread communication
     RT_queue = queue.Queue()
@@ -102,12 +113,29 @@ def main():
                 polygons, vehicle_polygon = detection_adjustment(LiDAR_data_flow, RT_data_flow, LiDAR_data, veh_xy, map_heading)
                 # Updating the occupancy grid map with the detections, position
                 occupancy_map, submatrix, vehicle_pos, smoothed_path, target = update_grid(LiDAR_data_flow, RT_data_flow, path_planning, occupancy_map, polygons, grid_size, num_rows, num_cols, submatrix_size, veh_xy, vehicle_polygon, target_xy, map_heading)
-                
+                 
+                if control:
+                    # Start a thread for steering calculations and CAN message sending
+                    steering_thread_instance = threading.Thread(
+                        target=steering_thread,
+                        args=(vehicle_pos, smoothed_path, map_heading, wheelbase, lookahead_distance, steering_angle_tolerance)
+                    )
+                    steering_thread_instance.start()
+                    
                 # Updating the plot
                 if plot_enabled and continuous_plot:
-                    plot(occupancy_map, submatrix, veh_xy, grid_size, map_width, map_height, RT_data_flow, mode='submatrix')
                     
-                angle_and_distance(vehicle_pos, smoothed_path, map_heading, target, wheelbase, lookahead)
+                    for point in smoothed_path:
+                        distance = np.linalg.norm(np.array(point) - np.array(vehicle_pos))
+                        if distance >= lookahead_distance:
+                            occupancy_map[point] = 0
+                            occupancy_map[point[0]+1, point[1]] = 0
+                            occupancy_map[point[0]+1, point[1]+1] = 0
+                            occupancy_map[point[0]-1, point[1]] = 0
+                            occupancy_map[point[0]-1, point[1]-1] = 0
+                            break
+                        
+                    plot(occupancy_map, submatrix, veh_xy, grid_size, map_width, map_height, RT_data_flow, mode='submatrix')
             
             # Printing out the given values    
             if print_data:
@@ -128,6 +156,15 @@ def main():
                     print(f"Distance to target point: -- meters    ")
                     print(f"RT:    NOK  ")
                     print(f"LiDAR: NOK  ")
+                
+                if RT_data_flow and control:
+                    print(f"Current steering angle:\t\t{steering_values[0]:.5f} \tdeg")
+                    print(f"Calculated steering angle:\t{steering_values[1]:.5f} \tdeg")
+                    print(f"Transmitted steering angle:\t{steering_values[2]:.5f} \tdeg")
+                else:
+                    print(f"Current steering angle:\t\t-\tdeg")
+                    print(f"Calculated steering angle:\t-\tdeg")
+                    print(f"Transmitted steering angle:\t-\tdeg")
 
     except KeyboardInterrupt:
         # Making plot to remain open after exiting the code
