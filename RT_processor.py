@@ -64,10 +64,18 @@ def process_RT_data(ip, port, target_xy):
                         # Building the timestamp
                         timestamp = full_time + milisec
 
-                        # Extract latitude, longitude and heading
+                        # Extract latitude, longitude, heading, nort and east velocity
                         latitude_rad = struct.unpack_from('<d', data, offset=23)[0]
                         longitude_rad = struct.unpack_from('<d', data, offset=31)[0]
                         heading_rad = int.from_bytes(data[52:55], byteorder='little', signed=True) * 1e-6
+
+                        north_velocity = int.from_bytes(data[43:46], byteorder='little', signed=True) * 1e-4
+                        east_velocity = int.from_bytes(data[46:49], byteorder='little', signed=True) * 1e-4
+                        
+                        # Calculatin vehicle x, y and normal velicity
+                        normal_velocity = math.sqrt(north_velocity**2 + east_velocity**2)
+                        velocity_x = normal_velocity * math.sin(heading_rad) * -1
+                        velocity_y = normal_velocity * math.cos(heading_rad) * -1
 
                         # Convert from radians to degrees
                         latitude_deg = math.degrees(latitude_rad)
@@ -93,7 +101,7 @@ def process_RT_data(ip, port, target_xy):
                         
                         map_heading= heading_deg - initial_heading
                         
-                        yield lat_lon, map_heading, timestamp, distance, veh_xy
+                        yield lat_lon, map_heading, timestamp, distance, veh_xy, normal_velocity, velocity_x, velocity_y
 
             except socket.timeout:
                 timeout = True

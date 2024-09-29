@@ -8,34 +8,45 @@ current_steering_angle = 0
 transmitted_steering_angle = 0
 alive_counter = 0
 
+# Proportional gain for the P controller
+#Kp = 0.01  # Adjust this value for smoother or faster response
+
 # Initialize the CAN bus
 bus = can.Bus(interface='pcan', channel='PCAN_USBBUS1', bitrate=500)
 
 def steering(new_steering_angle, steering_angle_tolerance):
-    global current_steering_angle
+    global current_steering_angle, transmitted_steering_angle
     
-    new_steering_angle = new_steering_angle * 40
-    new_steering_angle = int(new_steering_angle)
-    if current_steering_angle -2 <= new_steering_angle <= current_steering_angle + 2:
-        new_steering_angle = current_steering_angle
+    #new_steering_angle = new_steering_angle #* 40
+    #new_steering_angle = int(new_steering_angle)
     
-    if new_steering_angle > 180:
-        new_steering_angle = 180
-    elif new_steering_angle < -180:
-        new_steering_angle = -180
+    #if current_steering_angle - 10 <= new_steering_angle <= current_steering_angle + 10:
+    #    new_steering_angle = current_steering_angle
+
+    # P controller to smooth the transition
+    #error = new_steering_angle - current_steering_angle
+    #control_output = Kp * error
     
-    if current_steering_angle - steering_angle_tolerance <= new_steering_angle <= current_steering_angle + steering_angle_tolerance:
-        transmitted_steering_angle = new_steering_angle
-        send_one(transmitted_steering_angle)
-    elif new_steering_angle < current_steering_angle - steering_angle_tolerance:
-        transmitted_steering_angle = current_steering_angle - steering_angle_tolerance
-        send_one(transmitted_steering_angle)
-    elif new_steering_angle > current_steering_angle + steering_angle_tolerance:
+    #transmitted_steering_angle = current_steering_angle #+ control_output
+    
+    transmitted_steering_angle = new_steering_angle
+    
+    # Ensure the transmitted angle respects the steering angle tolerance
+    if transmitted_steering_angle > current_steering_angle + steering_angle_tolerance:
         transmitted_steering_angle = current_steering_angle + steering_angle_tolerance
-        send_one(transmitted_steering_angle)
+    if transmitted_steering_angle < current_steering_angle - steering_angle_tolerance:
+        transmitted_steering_angle = current_steering_angle - steering_angle_tolerance
+        
+    #if transmitted_steering_angle > 180:
+    #    transmitted_steering_angle = 180
+    #elif transmitted_steering_angle < -180:
+    #    transmitted_steering_angle = -180
+    
+    # Send the adjusted angle over CAN
+    send_one(transmitted_steering_angle)
     
     current_steering_angle_to_send = current_steering_angle
-    current_steering_angle = new_steering_angle
+    current_steering_angle = transmitted_steering_angle  # Update the current angle to the new target
     
     return current_steering_angle_to_send, new_steering_angle, transmitted_steering_angle
 
@@ -56,7 +67,6 @@ def encode_can_data(data_1, data_2, data_3, data_4, data_5, data_6, data_7, data
 def send_one(steering_angle):
     global alive_counter
     
-    #if control:
     Alive_DFLaDMCOutput01 = alive_counter
     LaDMC_Status__nu = 1
     LaDMC_SteerAngReq__deg = int(65535 * (((steering_angle * (-1)) + 800) / 1638.375))
@@ -67,21 +77,6 @@ def send_one(steering_angle):
     data[2] = 0x80
     data[3] = 0x80
     data[4] = 0xBE
-    
-    #else:
-    #    Alive_DFLaDMCOutput01 = alive_counter
-    #    LaDMC_Status__nu = 0
-    #    LaDMC_SteerAngReq__deg = 0
-    #
-    #    data = encode_can_data(0, Alive_DFLaDMCOutput01, LaDMC_Status__nu, 0, 0, 0, 0, 0, LaDMC_SteerAngReq__deg)
-    #
-    #    data[0] = 0x00
-    #    data[2] = 0x00
-    #    data[3] = 0x80
-    #    data[4] = 0x3E
-    #    data[5] = 0x00
-    #    data[6] = 0xF4
-    #    data[7] = 0x01
 
     msg = can.Message(
         arbitration_id=0x74, data=data, is_extended_id=False
@@ -96,8 +91,6 @@ def send_one(steering_angle):
         bus.send(msg)
     except can.CanError:
         print("Message NOT sent")
-  
-    time.sleep(0.1) 
 
 #BO_ 116 AP_DFLaDMCOutput01: 8 AP
 # SG_ LaDMC_SteerAngReq__deg : 42|16@1+ (0.025,-800) [-800|838.375] "deg"  Gateway

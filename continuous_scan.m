@@ -4,15 +4,15 @@ clc
 % Define Filtering Parameters (unchanged)
 min_horizontal_ang = deg2rad(-60);  % Minimum horizontal angle in radians
 max_horizontal_ang = deg2rad(60);   % Maximum horizontal angle in radians
-min_vertical_ang = deg2rad(-50);    % Minimum vertical angle in radians
+min_vertical_ang = deg2rad(-5);    % Minimum vertical angle in radians
 max_vertical_ang = deg2rad(10);              % Maximum vertical angle in radians
-min_dist = 1.5;                       % Minimum distance
-max_dist = 100;                      % Maximum distance
-ground_threshold = -1;            % Threshold for removing ground reflections (in meters)
+min_dist = 5;                       % Minimum distance
+max_dist = 25;                      % Maximum distance
+ground_threshold = -0.5;            % Threshold for removing ground reflections (in meters)
 plot_type = "both";                 % 'live' or 'filtered' or 'both' or 'none' (plotting the raw point cloud or the filtered point cloud or none)
 data = "live";                      % 'live' or 'recorded'
 epsilon = 0.4;                      % DBSCAN epsilon parameter
-minPts = 25;                        % DBSCAN minimum points parameter
+minPts = 15;                        % DBSCAN minimum points parameter
 
 % Create a TCP/IP client
 t = tcpclient('localhost', 54320);   % Connect to the Python server
